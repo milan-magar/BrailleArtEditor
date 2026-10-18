@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image to Braille Converter</title>
+    <style>
+        :root {
+            --bg-dark: #161618;
+            --panel-bg: #1e1e20;
+            --text-main: #e0e0e0;
+            --accent: #00e5ff;
+            --border: #333338;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        .toolbar {
+            background-color: var(--panel-bg);
+            padding: 15px 20px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #a0a0a0;
+        }
+
+        input[type="number"] {
+            background-color: #2a2a2d;
+            border: 1px solid var(--border);
+            color: white;
+            padding: 5px 8px;
+            border-radius: 4px;
+            width: 70px;
+            outline: none;
+        }
+
+        input[type="range"] {
+            accent-color: var(--accent);
+            cursor: pointer;
+            width: 80px;
+        }
+
+        input[type="checkbox"] {
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
+        #rowInfo {
+            font-size: 12px;
+            color: #888;
+            margin-left: 5px;
+            font-style: italic;
+        }
+
+        button {
+            background-color: #2a2a2d;
+            border: 1px solid var(--border);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            background-color: #3a3a3d;
+            border-color: #555;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        button.primary {
+            background-color: #0055aa;
+            border-color: #0066cc;
+        }
+
+        button.primary:hover {
+            background-color: #0066cc;
+        }
+
+        button.purple {
+            background-color: #6b21a8;
+            border-color: #7e22ce;
+        }
+        
+        button.purple:hover {
+            background-color: #7e22ce;
+        }
+
+        .zoom-btn {
+            padding: 4px 10px;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        /* Main Workspace */
+        .workspace {
+            display: flex;
+            gap: 20px;
+            flex: 1;
+            min-height: 0; 
+        }
+
+        .panel {
+            background-color: var(--panel-bg);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .preview-panel {
+            flex: 4;
+        }
+
+        .output-panel {
+            flex: 6;
+        }
+
+        .panel-header {
+            padding: 10px 15px;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+            font-weight: bold;
+            color: #a0a0a0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-header-hint {
+            font-size: 11px;
+            color: #666;
+            text-transform: none;
+            letter-spacing: 0;
+            font-weight: normal;
+        }
+
+        .canvas-container {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            background-color: #111;
+            overflow: hidden;
+        }
+
+        canvas {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            border: 1px solid #333;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        /* --- NEW CSS GRID FOR PERFECT ALIGNMENT --- */
+        #outputGridContainer {
+            flex: 1;
+            background-color: #111;
+            padding: 15px;
+            overflow: auto;
+            display: flex;
+            justify-content: center; /* Centers the grid horizontally */
+            align-items: flex-start; /* Aligns to top */
+        }
+
+        #outputGrid {
+            display: grid;
+            /* Grid template columns and rows are set dynamically via JS */
+            gap: 0;
+            background-color: #111;
+        }
+
+        .braille-char {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Segoe UI Symbol', 'DejaVu Sans', monospace;
+            font-size: 16px;
+            line-height: 1;
+            margin: 0;
+            padding: 0;
+            color: var(--accent);
+            /* Remove any sub-pixel rendering gaps */
+            transform: translateZ(0); 
+        }
+
+        .hidden {
+            display: none !important;
+        }
+        
+        .slider-group {
+            border-left: 1px solid var(--border);
+            padding-left: 15px;
+            margin-left: 5px;
+            display: flex;
+            gap: 15px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="toolbar">
+        <input type="file" id="imageLoader" accept="image/png, image/jpeg, image/webp" class="hidden">
+        <button onclick="document.getElementById('imageLoader').click()">Load Image...</button>
+        
+        <div class="control-group">
+            <label>Width (Cols):</label>
+            <input type="number" id="colsInput" value="50" min="4" max="250">
+            <span id="rowInfo"></span>
+        </div>
+
+        <div class="control-group">
+            <label>Threshold:</label>
+            <input type="range" id="thresholdSlider" min="1" max="255" value="128">
+            <span id="thresholdValue">128</span>
+        </div>
+
+        <div class="control-group">
+            <input type="checkbox" id="invertCheckbox">
+            <label for="invertCheckbox">Invert</label>
+        </div>
+
+        <button id="autoCropBtn" disabled onclick="autoCropImage()">Auto-Crop</button>
+        <button id="convertBtn" class="primary" disabled onclick="convertToBraille()">Convert</button>
+        
+        <div class="slider-group">
+            <div class="control-group">
+                <label>Size:</label>
+                <button class="zoom-btn" onclick="zoomOut()">-</button>
+                <button class="zoom-btn" onclick="zoomIn()">+</button>
+            </div>
+        </div>
+
+        <button id="copyBtn" disabled onclick="copyToClipboard()">Copy Text</button>
+        <button id="saveBtn" disabled onclick="saveToFile()">Save .txt</button>
+        <button id="pngBtn" class="purple" disabled onclick="downloadPNG()">Save Image (.png)</button>
+    </div>
+
+    <div class="workspace">
+        <!-- Left Panel: Preview (40% width) -->
+        <div class="panel preview-panel">
+            <div class="panel-header">Image Preview</div>
+            <div class="canvas-container">
+                <canvas id="previewCanvas"></canvas>
+            </div>
+        </div>
+
+        <!-- Right Panel: Output (60% width) -->
+        <div class="panel output-panel">
+            <div class="panel-header">
+                Braille Output
+                <span class="panel-header-hint">Grid-aligned characters</span>
+            </div>
+            <!-- Replaced textarea with a CSS Grid container -->
+            <div id="outputGridContainer">
+                <div id="outputGrid"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- State Variables ---
+        let originalImage = null;
+        let croppedImage = null;
+        let imageLoaded = false;
+        let outputFontSize = 16; 
+        let globalBrailleText = ""; // Stores raw text for copying/saving
+
+        const imageLoader = document.getElementById('imageLoader');
+        const previewCanvas = document.getElementById('previewCanvas');
+        const ctx = previewCanvas.getContext('2d');
+        const colsInput = document.getElementById('colsInput');
+        const rowInfo = document.getElementById('rowInfo');
+        const thresholdSlider = document.getElementById('thresholdSlider');
+        const thresholdValue = document.getElementById('thresholdValue');
+        const invertCheckbox = document.getElementById('invertCheckbox');
+        const autoCropBtn = document.getElementById('autoCropBtn');
+        const convertBtn = document.getElementById('convertBtn');
+        const copyBtn = document.getElementById('copyBtn');
+        const saveBtn = document.getElementById('saveBtn');
+        const pngBtn = document.getElementById('pngBtn');
+        const outputGrid = document.getElementById('outputGrid');
+
+        // --- Zoom Functions ---
+        function zoomIn() {
+            outputFontSize = Math.min(outputFontSize + 2, 72); 
+            updateGridFontSize();
+        }
+
+        function zoomOut() {
+            outputFontSize = Math.max(outputFontSize - 2, 6); 
+            updateGridFontSize();
+        }
+
+        function updateGridFontSize() {
+            const chars = document.querySelectorAll('.braille-char');
+            chars.forEach(char => {
+                char.style.fontSize = outputFontSize + 'px';
+                // Adjust box size based on font size to keep grid tight
+                char.style.width = (outputFontSize * 0.6) + 'px';
+                char.style.height = (outputFontSize * 1.0) + 'px';
+            });
+        }
+
+        // --- Event Listeners ---
+        imageLoader.addEventListener('change', handleImageUpload);
+        colsInput.addEventListener('input', () => {
+            if (imageLoaded) updatePreview();
+        });
+        thresholdSlider.addEventListener('input', (e) => {
+            thresholdValue.textContent = e.target.value;
+            if (imageLoaded) updatePreview();
+        });
+        invertCheckbox.addEventListener('change', () => {
+            if (imageLoaded) updatePreview();
+        });
+
+        // --- Auto Detect Invert ---
+        function autoDetectInvert() {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = croppedImage.width;
+            tempCanvas.height = croppedImage.height;
+            const tCtx = tempCanvas.getContext('2d');
+            tCtx.drawImage(croppedImage, 0, 0);
+
+            const points = [
+                [0, 0], 
+                [tempCanvas.width - 1, 0], 
+                [0, tempCanvas.height - 1], 
+                [tempCanvas.width - 1, tempCanvas.height - 1]
+            ];
+            
+            let totalLum = 0;
+            let validPoints = 0;
+            
+            for (let [x, y] of points) {
+                const p = tCtx.getImageData(x, y, 1, 1).data;
+                if (p[3] > 0) { 
+                    const lum = (0.299 * p[0]) + (0.587 * p[1]) + (0.114 * p[2]);
+                    totalLum += lum;
+                    validPoints++;
+                }
+            }
+            
+            if (validPoints > 0) {
+                const avgLum = totalLum / validPoints;
+                invertCheckbox.checked = avgLum < 128; // Auto-invert if dark
+            }
+        }
+
+        // --- Image Loading ---
+        function handleImageUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    originalImage = img;
+                    croppedImage = img;
+                    imageLoaded = true;
+                    
+                    autoDetectInvert(); 
+                    
+                    autoCropBtn.disabled = false;
+                    convertBtn.disabled = false;
+                    copyBtn.disabled = false;
+                    saveBtn.disabled = false;
+                    pngBtn.disabled = false;
+                    updatePreview();
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // --- Auto Crop ---
+        function autoCropImage() {
+            if (!originalImage) return;
+
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = originalImage.width;
+            tempCanvas.height = originalImage.height;
+            const tCtx = tempCanvas.getContext('2d');
+            tCtx.drawImage(originalImage, 0, 0);
+
+            const imgData = tCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+            const pixels = imgData.data;
+            const width = tempCanvas.width;
+            const height = tempCanvas.height;
+
+            let top = height, left = width, bottom = 0, right = 0;
+            let foundPixel = false;
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const i = (y * width + x) * 4;
+                    const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2], a = pixels[i + 3];
+
+                    if (a > 0 && (r < 240 || g < 240 || b < 240)) {
+                        if (x < left) left = x;
+                        if (x > right) right = x;
+                        if (y < top) top = y;
+                        if (y > bottom) bottom = y;
+                        foundPixel = true;
+                    }
+                }
+            }
+
+            if (foundPixel && right >= left && bottom >= top) {
+                const cropW = right - left + 1;
+                const cropH = bottom - top + 1;
+                
+                const croppedCanvas = document.createElement('canvas');
+                croppedCanvas.width = cropW;
+                croppedCanvas.height = cropH;
+                const cCtx = croppedCanvas.getContext('2d');
+                
+                cCtx.fillStyle = '#FFFFFF';
+                cCtx.fillRect(0, 0, cropW, cropH);
+                cCtx.drawImage(originalImage, left, top, cropW, cropH, 0, 0, cropW, cropH);
+                
+                const newImg = new Image();
+                newImg.onload = () => {
+                    croppedImage = newImg;
+                    updatePreview();
+                };
+                newImg.src = croppedCanvas.toDataURL();
+            } else {
+                alert("Could not find subject to auto-crop (image might be entirely white).");
+            }
+        }
+
+        // --- Helper to calculate dimensions based on aspect ratio ---
+        function calculateDimensions() {
+            const cols = parseInt(colsInput.value);
+            const targetW = cols * 2;
+            
+            const aspect = croppedImage.width / croppedImage.height;
+            const idealH = targetW / aspect;
+            const rows = Math.max(1, Math.round(idealH / 4));
+            const targetH = rows * 4;
+
+            rowInfo.textContent = `(Auto Rows: ${rows})`;
+
+            return { cols, rows, targetW, targetH };
+        }
+
+        // --- Preview Generation (Thresholded) ---
+        function updatePreview() {
+            if (!croppedImage) return;
+
+            const { targetW, targetH } = calculateDimensions();
+            const threshold = parseInt(thresholdSlider.value);
+            const invert = invertCheckbox.checked;
+
+            previewCanvas.width = targetW;
+            previewCanvas.height = targetH;
+
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, targetW, targetH);
+            ctx.drawImage(croppedImage, 0, 0, targetW, targetH);
+
+            const imgData = ctx.getImageData(0, 0, targetW, targetH);
+            const pixels = imgData.data;
+
+            for (let i = 0; i < pixels.length; i += 4) {
+                const r = pixels[i];
+                const g = pixels[i + 1];
+                const b = pixels[i + 2];
+
+                const luminance = (0.299 * r) + (0.587 * g) + (0.114 * b);
+                let isDark = luminance < threshold;
+                if (invert) isDark = !isDark;
+
+                const color = isDark ? 0 : 255;
+                pixels[i] = color;
+                pixels[i + 1] = color;
+                pixels[i + 2] = color;
+                pixels[i + 3] = 255;
+            }
+
+            ctx.putImageData(imgData, 0, 0);
+            
+            previewCanvas.style.width = "100%";
+            previewCanvas.style.imageRendering = "pixelated";
+        }
+
+        // --- Core Braille Conversion Logic ---
+        function convertToBraille() {
+            if (!croppedImage) return;
+
+            const { cols, rows, targetW, targetH } = calculateDimensions();
+            const threshold = parseInt(thresholdSlider.value);
+            const invert = invertCheckbox.checked;
+
+            const offCanvas = document.createElement('canvas');
+            offCanvas.width = targetW;
+            offCanvas.height = targetH;
+            const offCtx = offCanvas.getContext('2d');
+
+            offCtx.fillStyle = '#FFFFFF';
+            offCtx.fillRect(0, 0, targetW, targetH);
+            offCtx.drawImage(croppedImage, 0, 0, targetW, targetH);
+
+            const imgData = offCtx.getImageData(0, 0, targetW, targetH);
+            const pixels = imgData.data;
+
+            const dotMap = [
+                [0x01, 0x08],
+                [0x02, 0x10],
+                [0x04, 0x20],
+                [0x40, 0x80]
+            ];
+
+            let textBuffer = "";
+            
+            // Clear previous grid
+            outputGrid.innerHTML = "";
+            outputGrid.style.gridTemplateColumns = `repeat(${cols}, max-content)`;
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    let charCode = 0x2800;
+
+                    for (let dy = 0; dy < 4; dy++) {
+                        for (let dx = 0; dx < 2; dx++) {
+                            const px = (c * 2) + dx;
+                            const py = (r * 4) + dy;
+                            
+                            const i = (py * targetW + px) * 4;
+                            const red = pixels[i];
+                            const green = pixels[i + 1];
+                            const blue = pixels[i + 2];
+
+                            const luminance = (0.299 * red) + (0.587 * green) + (0.114 * blue);
+                            let isDark = luminance < threshold;
+                            if (invert) isDark = !isDark;
+
+                            if (isDark) {
+                                charCode |= dotMap[dy][dx];
+                            }
+                        }
+                    }
+                    
+                    const brailleChar = String.fromCharCode(charCode);
+                    textBuffer += brailleChar;
+
+                    // Create a DOM element for the grid
+                    const charDiv = document.createElement('div');
+                    charDiv.className = 'braille-char';
+                    charDiv.textContent = brailleChar;
+                    charDiv.style.fontSize = outputFontSize + 'px';
+                    charDiv.style.width = (outputFontSize * 0.6) + 'px';
+                    charDiv.style.height = (outputFontSize * 1.0) + 'px';
+                    
+                    outputGrid.appendChild(charDiv);
+                }
+                textBuffer += "\n"; // Add newline for saving to .txt
+            }
+
+            globalBrailleText = textBuffer;
+        }
+
+        // --- Clipboard Functionality ---
+        function copyToClipboard() {
+            if (!globalBrailleText) return;
+
+            navigator.clipboard.writeText(globalBrailleText).then(() => {
+                const originalText = copyBtn.innerText;
+                copyBtn.innerText = "Copied!";
+                copyBtn.style.backgroundColor = "#00aa55";
+                setTimeout(() => {
+                    copyBtn.innerText = originalText;
+                    copyBtn.style.backgroundColor = "";
+                }, 1500);
+            }).catch(err => {
+                alert("Failed to copy text: " + err);
+            });
+        }
+
+        // --- Save to File Functionality ---
+        function saveToFile() {
+            if (!globalBrailleText) return;
+
+            const blob = new Blob([globalBrailleText], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'braille_art.txt';
+            document.body.appendChild(a);
+            a.click();
+            
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            const originalText = saveBtn.innerText;
+            saveBtn.innerText = "Saved!";
+            saveBtn.style.backgroundColor = "#00aa55";
+            setTimeout(() => {
+                saveBtn.innerText = originalText;
+                saveBtn.style.backgroundColor = "";
+            }, 1500);
+        }
+
+        // --- Save as PNG Functionality ---
+        function downloadPNG() {
+            if (!globalBrailleText) return;
+
+            const lines = globalBrailleText.split(/\r?\n/).filter(line => line.length > 0);
+            if (lines.length === 0) return;
+
+            const cols = lines[0].length;
+            const rows = lines.length;
+
+            const dotScale = 8; 
+            const gap = 0;      
+            
+            const cellWidth = (2 * dotScale) + gap; 
+            const cellHeight = (4 * dotScale) + (3 * gap); 
+
+            const imgWidth = cols * cellWidth;
+            const imgHeight = rows * cellHeight;
+
+            const imgCanvas = document.createElement('canvas');
+            imgCanvas.width = imgWidth;
+            imgCanvas.height = imgHeight;
+            const iCtx = imgCanvas.getContext('2d');
+
+            iCtx.fillStyle = '#111111'; 
+            iCtx.fillRect(0, 0, imgWidth, imgHeight);
+
+            iCtx.fillStyle = '#00e5ff';
+
+            const dotOffsets = [
+                [0x01, 0x08], 
+                [0x02, 0x10], 
+                [0x04, 0x20], 
+                [0x40, 0x80]  
+            ];
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const char = lines[r].charCodeAt(c);
+                    if (isNaN(char) || char < 0x2800 || char > 0x28FF) continue;
+                    
+                    const charCode = char - 0x2800;
+
+                    for (let dy = 0; dy < 4; dy++) {
+                        for (let dx = 0; dx < 2; dx++) {
+                            if ((charCode & dotOffsets[dy][dx]) !== 0) {
+                                const x = (c * cellWidth) + (dx * (dotScale + gap));
+                                const y = (r * cellHeight) + (dy * (dotScale + gap));
+                                
+                                iCtx.fillRect(x, y, dotScale, dotScale);
+                            }
+                        }
+                    }
+                }
+            }
+
+            const url = imgCanvas.toDataURL("image/png");
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'braille_art.png';
+            document.body.appendChild(a);
+            a.click();
+            
+            document.body.removeChild(a);
+            
+            const originalText = pngBtn.innerText;
+            pngBtn.innerText = "Downloaded!";
+            pngBtn.style.backgroundColor = "#00aa55";
+            setTimeout(() => {
+                pngBtn.innerText = originalText;
+                pngBtn.style.backgroundColor = "";
+            }, 1500);
+        }
+    </script>
+</body>
+</html>
