@@ -40,6 +40,8 @@ Open Command Prompt (cmd), navigate to the root BrailleArtEditor folder, and run
 
 cmd
 javac -d bin src\*.java
+
+
 2. Run the Application
 To launch the full Master Suite:
 
