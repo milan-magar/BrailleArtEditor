@@ -29,6 +29,8 @@ BrailleArtEditor/
 ├── bin/                  # Compiled .class files (Ignored by Git)
 │
 └── Artworks/             # Exported .txt Braille art files
+
+
 🛠️ How to Compile and Run
 Prerequisites
 Java Development Kit (JDK) 8 or higher installed and added to your system PATH.
